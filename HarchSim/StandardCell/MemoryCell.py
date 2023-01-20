@@ -19,16 +19,12 @@ class MemoryCell:
         :param cavity: Multimode bosonic Mode cavity describing memory
         :param transmon: Transmon coupled to the Multimode bosonic Mode
         """
-        self.LOCK = None
-        self.PENDING_OUTPUT = None
         self.cavity = cavity
         self.transmon = transmon
         self.exta_tags = []
         self.available = True
         self.memory = {}
         self.LOAD_TIME = load_time
-        self.PENDING = False
-        self.MODE = MemoryMode.IDLE
 
     def initalize_memory(self,
                          extra_tags: list = None):
@@ -111,7 +107,8 @@ class MemoryCell:
         return False
 
     def get_oldest_qubit(self, time):
-        oldest_qubit_time = 0
+        # DOES NOT WORK YET
+        oldest_qubit_time = -1
         oldest_qubit_index = None
         for i in range(self.cavity.levels):
             if self.memory[i]["dm"] is not None:
@@ -121,69 +118,24 @@ class MemoryCell:
                     oldest_qubit_time = t_qubit
         return oldest_qubit_index, oldest_qubit_time
 
-    def set_available(self):
-        self.available = True
+    def get_qubit(self):
+        for i in range(self.cavity.levels):
+            if self.memory[i]["dm"] is not None:
+                return i
 
-    def set_unavailable(self):
-        self.available = False
-
-    def is_pending(self):
-        if self.MODE == MemoryMode.PENDING_OUTPUT:
-            return True
 
     def input(self, dm):
-        if self.available is True and self.is_slot_available():
-            loaded = self.load_into_memory(dm, self.clock.clock + self.LOAD_TIME)
-            self.LOCK = copy.copy(self.clock.clock)
-            self.PENDING = False
-            self.available = False
-            self.MODE = MemoryMode.LOADING
+        if self.is_slot_available():
+            self.load_into_memory(dm, self.clock.clock + self.LOAD_TIME)
             return True
-        print(f"Failed to load into memory, No slots available, or controller unavailable")
+        print(f"Failed to load into memory, No slots available")
         return False
-
-    def input_loading(self):
-        if self.LOCK is not None and\
-                self.clock.clock - self.LOCK >= self.LOAD_TIME and\
-                self.available is False:
-            self.PENDING = False
-            self.LOCK = None
-            self.set_available()
-            self.MODE = MemoryMode.IDLE
-
-    def check_status(self):
-        if self.MODE is MemoryMode.LOADING:
-            self.input_loading()
-        elif self.MODE is MemoryMode.READING:
-            self.output_pending_check()
-
-    def output_request(self,index):
-        if self.available and self.qb_in_memory():
-            dm = self.memory[index]['dm']
-            time = self.memory[index]['time']
-            self.LOCK = copy.copy(self.clock.clock)
-            self.set_unavailable()
-            self.memory[index]["time"] = None
-            self.memory[index]["dm"] = None
-            self.PENDING_OUTPUT = (dm, time)
-            self.MODE = MemoryMode.READING
-            return True
-        return False
-
-    def output_pending_check(self):
-        if self.LOCK is not None and \
-                self.clock.clock - self.LOCK >= self.LOAD_TIME:
-            self.PENDING = True
-            self.LOCK = None
-            self.MODE = MemoryMode.PENDING_OUTPUT
 
     def output(self):
-        if self.MODE is MemoryMode.PENDING_OUTPUT:
-            out = copy.copy(self.PENDING_OUTPUT)
-            self.PENDING_OUTPUT = None
-            self.available = True
-            self.PENDING = False
-            return out
-        else:
-            return False
+        index = self.get_qubit()
+        dm = self.memory[index]['dm']
+        time = self.memory[index]['time']
+        self.memory[index]["time"] = None
+        self.memory[index]["dm"] = None
+        return dm, time
 

@@ -84,9 +84,6 @@ class DistillationCell:
     def set_available(self):
         self.available = True
 
-    def set_not_available(self):
-        self.available = False
-
     def input(self, rho1, rho2):
         """
         :param qubit1: Density matrix of Qubit 1 to be distilled
@@ -95,12 +92,7 @@ class DistillationCell:
         """
         self.qb1.set_state(rho1)
         self.qb2.set_state(rho2)
-        self.PENDING = True
 
     def output(self):
-        if self.PENDING is True:
             output = self.distill()
-            if output is not None:
-                return output
-            else:
-                return False
+            return output

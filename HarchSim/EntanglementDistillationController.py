@@ -61,7 +61,7 @@ class EntanglementDistillationController:
         self.modules["distilled_memory"].input(distilled_qubit, 1)
 
     def tick(self):
-        self.clock_time += self.clock_speed
+        self.clock.tick()
 
     def summary(self):
         print(f"=== Input Modules ====\n{self.modules['input']}\n"+"="*20)
@@ -83,11 +83,22 @@ class EntanglementDistillationController:
         The Lowest priority is to call the Input Module and move a uqbit into the Memory Module.
         :return:
         """
-
-        self.tick()
-        # Begin by checking highest priority operation
-        qubit_available = self.modules["memory"].is_two_qubit_available()
-        cell_available = self.modules["distillation"].is_cell_available()
-        if qubit_available and cell_available:
-            dm1 = self.modules["memory"].output(self.clock_time)
-            dm2 = self.modules['memory'].output(self.clock_time)
+        for _ in range(1000):
+            MEMORY_TO_DISTILL = 100e-9
+            self.tick()
+            # Begin by checking highest priority operation
+            qubit_available = self.modules["memory"].is_two_qubit_available()
+            cell_available = self.modules["distillation"].is_cell_available()
+            if qubit_available and cell_available:
+                modules = self.modules["memory"].find_two_qubit_address()
+                cell = self.modules["distillation"].get_available_cell()
+                if len(modules) == 1:
+                    dm1, t_qubit1 = modules[0].output()
+                    dm2, t_qubit2= modules[0].output()
+                else:
+                    dm1, t_qubit1 = modules[0].output()
+                    dm2, t_qubit2 = modules[1].output()
+                cell.input(dm1,dm2)
+            # Now we check if we can unlock anything
+            self.modules["memory"].check_unlock()
+            print(f"Time: {self.clock.clock}")
