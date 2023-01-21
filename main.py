@@ -1,6 +1,6 @@
 from HarchSim.Modules.InputModule import InputModule
 from HarchSim.Modules.MemoryModule import MemoryModule
-from HarchSim.StandardCell.DistillationModule import DistillationModule
+from HarchSim.StandardCell.DistillationCell import DistillationCell
 from HarchSim.Device.Transmon import Transmon
 from HarchSim.Device.Cavity import Cavity
 from HarchSim.StandardCell.EPRGenerator import EPRGenerator
