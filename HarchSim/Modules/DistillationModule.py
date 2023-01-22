@@ -30,6 +30,11 @@ class DistillationModule:
         self.distillation_cells.remove(valid_cell)
         return valid_cell
 
+    def is_qubit_pending(self):
+        for cell in self.distillation_cells:
+            if cell.is_pending_output():
+                return True
+
     def bind_clock_to_modules(self):
         for module in self.distillation_cells:
             module.clock = self.clock
@@ -48,12 +53,14 @@ class DistillationModule:
             return True
         return False
 
-    def output(self):
+    def get_output(self):
         for cell in self.distillation_cells:
-            if cell.PENDING:
+            if cell.is_pending_output():
                 dm = cell.output()
-                cell.set_available()
-                return dm, True
-        return None, False
+                self.locked_cells[cell] = {}
+                self.locked_cells[cell]["time"] = self.clock.clock
+                self.locked_Cells[cell]["compute_time"] = 500e-9
+                self.distillation_cells.remove(cell)
+                return dm
 
 

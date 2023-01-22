@@ -3,7 +3,7 @@ import numpy as np
 from datetime import datetime
 import qiskit.quantum_info as qi
 from qiskit import QuantumCircuit
-
+import copy
 
 
 
@@ -34,6 +34,7 @@ class DistillationCell:
         :param noise_model:  Noise model describing system errors.
         """
         self.available = True
+        self.output = None
         self.qb1 = qb1
         self.qb2 = qb2
         self.PENDING = False
@@ -78,8 +79,10 @@ class DistillationCell:
         fidel = qi.state_fidelity(rho, self.phi_plus)
         return fidel
 
-    def is_available(self):
-        return self.available
+    def is_pending_output(self):
+        if self.output is not None:
+            return True
+        return False
 
     def set_available(self):
         self.available = True
@@ -92,7 +95,9 @@ class DistillationCell:
         """
         self.qb1.set_state(rho1)
         self.qb2.set_state(rho2)
+        self.output = self.distill()
 
     def output(self):
-            output = self.distill()
-            return output
+        out = copy.copy(self.output)
+        self.output = None
+        return out

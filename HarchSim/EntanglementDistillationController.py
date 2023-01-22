@@ -83,10 +83,24 @@ class EntanglementDistillationController:
         The Lowest priority is to call the Input Module and move a uqbit into the Memory Module.
         :return:
         """
+        MEMORY_TO_DISTILL = 100e-9
+        DISTILL_TO_MEMORY = 100e-9
+        INPUT_TO_MEMORY = 100e-9
         for _ in range(1000):
-            MEMORY_TO_DISTILL = 100e-9
             self.tick()
-            # Begin by checking highest priority operation
+            # ==================================================
+            # == Begin by checking highest priority operation ==
+            # ====== HighPrio : Check if distilled->memory =====
+            # ==================================================
+            distilled_pending = self.modules["distillation"].is_qubit_pending()
+            memory_pending = self.modules["distilled_memory"].is_cell_available()
+            if memory_pending and distilled_pending:
+                dm = self.modules['distillation'].get_output()
+                self.modules["distilled_memory"].input(dm)
+            # ==================================================
+            # ==== Begin by checking 2nd  priority operation ===
+            # ====== 2nd Prio : Check if distilled->memory =====
+            # ==================================================
             qubit_available = self.modules["memory"].is_two_qubit_available()
             cell_available = self.modules["distillation"].is_cell_available()
             if qubit_available and cell_available:
