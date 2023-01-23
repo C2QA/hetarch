@@ -34,7 +34,7 @@ class DistillationCell:
         :param noise_model:  Noise model describing system errors.
         """
         self.available = True
-        self.output = None
+        self.output_dm = None
         self.qb1 = qb1
         self.qb2 = qb2
         self.PENDING = False
@@ -80,9 +80,15 @@ class DistillationCell:
         return fidel
 
     def is_pending_output(self):
-        if self.output is not None:
+        if self.output_dm is not None:
             return True
         return False
+
+    def is_available(self):
+        if self.output_dm is not None:
+            return False
+        else:
+            return True
 
     def set_available(self):
         self.available = True
@@ -95,9 +101,9 @@ class DistillationCell:
         """
         self.qb1.set_state(rho1)
         self.qb2.set_state(rho2)
-        self.output = self.distill()
+        self.output_dm = self.distill()
 
     def output(self):
-        out = copy.copy(self.output)
-        self.output = None
+        out = copy.copy(self.output_dm)
+        self.output_dm = None
         return out

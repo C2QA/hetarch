@@ -15,7 +15,7 @@ class DistillationModule:
 
     def is_cell_available(self):
         for cell in self.distillation_cells:
-            if cell.is_available():
+            if not cell.is_pending_output():
                 return True
         return False
 
@@ -34,6 +34,7 @@ class DistillationModule:
         for cell in self.distillation_cells:
             if cell.is_pending_output():
                 return True
+        return False
 
     def bind_clock_to_modules(self):
         for module in self.distillation_cells:
@@ -59,7 +60,7 @@ class DistillationModule:
                 dm = cell.output()
                 self.locked_cells[cell] = {}
                 self.locked_cells[cell]["time"] = self.clock.clock
-                self.locked_Cells[cell]["compute_time"] = 500e-9
+                self.locked_cells[cell]["compute_time"] = 500e-9
                 self.distillation_cells.remove(cell)
                 return dm
 

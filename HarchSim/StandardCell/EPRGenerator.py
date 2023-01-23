@@ -34,5 +34,5 @@ class EPRGenerator:
         self.dm = self.cx @ self.dm @ self.cx.conj().transpose()
 
     def output(self):
-        return self.dm, self.time
+        return self.dm
 

@@ -95,15 +95,17 @@ class EntanglementDistillationController:
             distilled_pending = self.modules["distillation"].is_qubit_pending()
             memory_pending = self.modules["distilled_memory"].is_cell_available()
             if memory_pending and distilled_pending:
+                print(f" === D2M FIRING ===")
                 dm = self.modules['distillation'].get_output()
                 self.modules["distilled_memory"].input(dm)
             # ==================================================
-            # ==== Begin by checking 2nd  priority operation ===
+            # ==== Now check 2nd  priority operation ===
             # ====== 2nd Prio : Check if distilled->memory =====
             # ==================================================
             qubit_available = self.modules["memory"].is_two_qubit_available()
             cell_available = self.modules["distillation"].is_cell_available()
             if qubit_available and cell_available:
+                print(f" === M2D FIRING ===")
                 modules = self.modules["memory"].find_two_qubit_address()
                 cell = self.modules["distillation"].get_available_cell()
                 if len(modules) == 1:
@@ -113,6 +115,20 @@ class EntanglementDistillationController:
                     dm1, t_qubit1 = modules[0].output()
                     dm2, t_qubit2 = modules[1].output()
                 cell.input(dm1,dm2)
+            # ==================================================
+            # ==== Now start checking 3rd priority operation ===
+            # ====== 3rd Prio:Check if Input->memory avail =====
+            # ==================================================
+            input_available = self.modules["input"].is_input_available()
+            cell_available = self.modules["memory"].is_cell_available()
+            if input_available and cell_available:
+                print(f"I2M FIRING")
+                cell = self.modules["memory"].get_empty_available_memory()
+                input = self.modules["input"].get_input()
+                cell.input(input)
             # Now we check if we can unlock anything
             self.modules["memory"].check_unlock()
+            self.modules['distilled_memory'].check_unlock()
+            self.modules["distillation"].check_unlock()
+            self.modules["input"].check_unlock()
             print(f"Time: {self.clock.clock}")

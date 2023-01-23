@@ -16,8 +16,24 @@ class MemoryModule:
 
     def find_empty_available_memory(self):
         for module in self.memory:
-            if module.is_slot_available() and module.available:
+            if module.is_slot_available():
                 return module
+        return False
+
+    def get_empty_available_memory(self):
+        for module in self.memory:
+            if module.is_slot_available():
+                self.locked_memory[module] = {}
+                self.locked_memory[module]["time"] = self.clock.clock
+                self.locked_memory[module]["compute_time"] = 100e-9
+                self.memory.remove(module)
+                return module
+        return False
+
+    def is_cell_available(self):
+        for module in self.memory:
+            if module.n_slots_available() > 0:
+                return True
         return False
 
     def is_qubit_available(self):
@@ -55,11 +71,11 @@ class MemoryModule:
         for module in modules:
             self.locked_memory[module] = {}
             self.locked_memory[module]["time"] = self.clock.clock
-            self.locked_memory[module]["compute_time"] = 500e-9 # Just set this process to be 500us.. oh well
+            self.locked_memory[module]["compute_time"] = 500e-9  # Just set this process to be 500us.. oh well
             self.memory.remove(module)
         return modules
 
-    def find_available_qubit(self,clock):
+    def find_available_qubit(self, clock):
         oldest_memory = None
         oldest_qubit_index = None
         oldest_qubit_time = 0
@@ -82,6 +98,10 @@ class MemoryModule:
 
     def input(self, dm):
         module = self.find_empty_available_memory()
+        self.locked_memory[module] = {}
+        self.locked_memory[module]["time"] = self.clock.clock
+        self.locked_memory[module]["compute_time"] = 100e-9
+        self.memory.remove(module)
         module.input(dm)
 
     # def output(self):
