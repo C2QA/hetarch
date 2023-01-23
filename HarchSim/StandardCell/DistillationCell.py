@@ -31,7 +31,6 @@ class DistillationCell:
     def __init__(self, qb1, qb2):
         """
         :param protocol: String variable describing the protocol. e.g. Deutsch
-        :param noise_model:  Noise model describing system errors.
         """
         self.available = True
         self.output_dm = None
