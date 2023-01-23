@@ -86,10 +86,27 @@ class EntanglementDistillationController:
         MEMORY_TO_DISTILL = 100e-9
         DISTILL_TO_MEMORY = 100e-9
         INPUT_TO_MEMORY = 100e-9
-        for _ in range(1000):
+        for _ in range(5000):
             self.tick()
             # ==================================================
             # == Begin by checking highest priority operation ==
+            # ====== HighPrio : Check if dmm->distilled    =====
+            # ==================================================
+            qubit_available = self.modules["distilled_memory"].is_two_qubit_available()
+            cell_available = self.modules["distillation"].is_cell_available()
+            if qubit_available and cell_available:
+                print(f" === DM2D FIRING ===")
+                modules = self.modules["distilled_memory"].find_two_qubit_address()
+                cell = self.modules["distillation"].get_available_cell()
+                if len(modules) == 1:
+                    dm1, t_qubit1 = modules[0].output()
+                    dm2, t_qubit2= modules[0].output()
+                else:
+                    dm1, t_qubit1 = modules[0].output()
+                    dm2, t_qubit2 = modules[1].output()
+                cell.input(dm1,dm2)
+            # ==================================================
+            # ==        2nd highest priority operation        ==
             # ====== HighPrio : Check if distilled->memory =====
             # ==================================================
             distilled_pending = self.modules["distillation"].is_qubit_pending()
@@ -99,8 +116,8 @@ class EntanglementDistillationController:
                 dm = self.modules['distillation'].get_output()
                 self.modules["distilled_memory"].input(dm)
             # ==================================================
-            # ==== Now check 2nd  priority operation ===
-            # ====== 2nd Prio : Check if distilled->memory =====
+            # ==== Now check 3rd priority operation ===
+            # ====== 3rd Prio : Check if distilled->memory =====
             # ==================================================
             qubit_available = self.modules["memory"].is_two_qubit_available()
             cell_available = self.modules["distillation"].is_cell_available()
@@ -116,8 +133,8 @@ class EntanglementDistillationController:
                     dm2, t_qubit2 = modules[1].output()
                 cell.input(dm1,dm2)
             # ==================================================
-            # ==== Now start checking 3rd priority operation ===
-            # ====== 3rd Prio:Check if Input->memory avail =====
+            # ==== Now start checking 4th priority operation ===
+            # ====== 4th Prio:Check if Input->memory avail =====
             # ==================================================
             input_available = self.modules["input"].is_input_available()
             cell_available = self.modules["memory"].is_cell_available()

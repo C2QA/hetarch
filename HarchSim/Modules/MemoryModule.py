@@ -13,6 +13,9 @@ class MemoryModule:
         self.memory = memory
         self.locked_memory = {}
         self.clock = None
+        # ANALYTICS FUNCTION - This will keep track of if a module is processing or sitting idle.
+        for memory in self.memory:
+            memory.ACTIVE = []
 
     def find_empty_available_memory(self):
         for module in self.memory:
@@ -92,9 +95,16 @@ class MemoryModule:
     def check_unlock(self):
         keys = list(self.locked_memory.keys())
         for key in keys:
+            # THIS IS AN ANALYTICAL LINE - THIS WILL APPEND TO MEMORY IF IT WAS COMPUTING. CAN BE REMOVED
+            key.ACTIVE.append(1)
+            # ====================================
             if self.clock.clock - self.locked_memory[key]["time"] > self.locked_memory[key]["compute_time"]:
                 self.memory.append(key)
                 self.locked_memory.pop(key)
+        # ANALYTICAL LINE - NOT PART OF FUNCTIONALITY
+        for memory in self.memory:
+            memory.ACTIVE.append(0)
+        # ====================================
 
     def input(self, dm):
         module = self.find_empty_available_memory()
