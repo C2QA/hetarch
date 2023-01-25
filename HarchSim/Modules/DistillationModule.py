@@ -64,4 +64,8 @@ class DistillationModule:
                 self.distillation_cells.remove(cell)
                 return dm
 
-
+    def __str__(self):
+        s = ""
+        for i,cell in enumerate(self.distillation_cells):
+            s += f"Dist. Cell - {i}\n"
+        return s

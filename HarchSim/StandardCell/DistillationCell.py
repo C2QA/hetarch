@@ -4,8 +4,7 @@ from datetime import datetime
 import qiskit.quantum_info as qi
 from qiskit import QuantumCircuit
 import copy
-
-
+from qiskit_aer.noise import (NoiseModel, thermal_relaxation_error)
 
 
 class DistillationCell:
@@ -28,21 +27,31 @@ class DistillationCell:
         - Protocol : Entanglement distillation protocol. This is the entire protocol that describes the purification
                      procedure.
     """
-    def __init__(self, qb1, qb2):
+
+    def __init__(self, qb1, qb2, distillation_time):
         """
         :param protocol: String variable describing the protocol. e.g. Deutsch
         """
         self.available = True
         self.output_dm = None
         self.qb1 = qb1
+
         self.qb2 = qb2
         self.PENDING = False
         self.psi_plus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]]) / 2)
         self.psi_minus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, -1, 0], [0, -1, 1, 0], [0, 0, 0, 0]]) / 2)
         self.phi_plus = qi.DensityMatrix(np.array([[1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 1]]) / 2)
         self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
+        self.sim = qiskit.Aer.get_backend('aer_simulator_density_matrix')
+        self.DISTILLATION_TIME = distillation_time
+        t1 = qb1.t1
+        t2 = qb2.t2
+        error_distill = thermal_relaxation_error(t1, t2, self.DISTILLATION_TIME)
+        noise_model_distill = NoiseModel()
+        noise_model_distill.add_all_qubit_quantum_error(error_distill, ['id'])
+        self.NOISE_MODEL_DISTILL = noise_model_distill
 
-    def QPA_circuit(self,rho_1, rho_2):
+    def QPA_circuit(self, rho_1, rho_2):
         # https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.77.2818
         rho_1 = qi.DensityMatrix(rho_1)
         rho_2 = qi.DensityMatrix(rho_2)
@@ -61,8 +70,20 @@ class DistillationCell:
 
         measured_state, measured_rho = rho_corrected.measure([0, 1])
         rho_final = qi.partial_trace(measured_rho, [0, 1])
-
-        return measured_state, rho_final, success_prob
+        # ===========================
+        # Now apply decay over time it takes to evolve. Can probably just switch this to a circuit noise
+        # ============================
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(rho_final)
+        circuit.id(0)
+        circuit.id(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model=self.NOISE_MODEL_DISTILL,
+                             optimization_level = 0)
+        dm_noisy = job.result().data()['density_matrix']
+        # ============================
+        return measured_state, dm_noisy, success_prob
 
     # Distillation function for any register
     def distill(self):
@@ -74,8 +95,8 @@ class DistillationCell:
         return None
 
     # Get average fidelity of pairs in register
-    def get_fidelity(register):
-        fidel = qi.state_fidelity(rho, self.phi_plus)
+    def get_fidelity(self, state):
+        fidel = qi.state_fidelity(state, self.phi_plus)
         return fidel
 
     def is_pending_output(self):

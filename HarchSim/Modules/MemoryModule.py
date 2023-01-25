@@ -61,7 +61,7 @@ class MemoryModule:
         else:
             return True
 
-    def find_two_qubit_address(self):
+    def find_two_qubit_address(self,compute_time):
         assert self.is_two_qubit_available()
         modules = []
         # We first check if there are two separate memories with 2
@@ -74,7 +74,7 @@ class MemoryModule:
         for module in modules:
             self.locked_memory[module] = {}
             self.locked_memory[module]["time"] = self.clock.clock
-            self.locked_memory[module]["compute_time"] = 500e-9  # Just set this process to be 500us.. oh well
+            self.locked_memory[module]["compute_time"] = compute_time
             self.memory.remove(module)
         return modules
 

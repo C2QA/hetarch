@@ -1,6 +1,12 @@
 from HarchSim.Device import Cavity, Transmon
 import copy
 from enum import Enum
+import qiskit
+import numpy as np
+# Import from Qiskit Aer noise module
+from qiskit_aer.noise import (NoiseModel, QuantumError, ReadoutError,
+    pauli_error, depolarizing_error, thermal_relaxation_error)
+
 
 class MemoryMode(Enum):
     LOADING = "loading data"
@@ -12,7 +18,8 @@ class MemoryCell:
     def __init__(self,
                  cavity: Cavity,
                  transmon: Transmon,
-                 load_time = 300e-9):
+                 load_time = 300e-9,
+                 read_time = 300e-9):
         """
         MemoryCell initialisation. MemoryCells are comprised of one transmon coupled to a cavity. Information
         exchange occurs through SWAP operation, whereby data is SWAPped in and out of memory.
@@ -24,7 +31,21 @@ class MemoryCell:
         self.exta_tags = []
         self.available = True
         self.memory = {}
+        self.sim = qiskit.Aer.get_backend('aer_simulator_density_matrix')
         self.LOAD_TIME = load_time
+        self.READ_TIME = read_time
+
+        t1 = transmon.t1
+        t2 = transmon.t2
+        error_load = thermal_relaxation_error(t1, t2, self.LOAD_TIME)
+        error_read = thermal_relaxation_error(t1, t2, self.READ_TIME)
+        noise_model_read = NoiseModel()
+        noise_model_load = NoiseModel()
+        noise_model_read.add_all_qubit_quantum_error(error_load, ['id'])
+        noise_model_load.add_all_qubit_quantum_error(error_read, ['id'])
+        self.NOISE_MODEL_READ = noise_model_read
+        self.NOISE_MODEL_LOAD = noise_model_load
+
 
     def initalize_memory(self,
                          extra_tags: list = None):
@@ -126,16 +147,45 @@ class MemoryCell:
 
     def input(self, dm):
         if self.is_slot_available():
-            self.load_into_memory(dm, self.clock.clock + self.LOAD_TIME)
+            # Noise model for load time
+            # ============================
+            circuit = qiskit.QuantumCircuit(2)
+            circuit.set_density_matrix(dm)
+            circuit.id(0)
+            circuit.id(1)
+            circuit.save_density_matrix()
+            job = qiskit.execute(circuit, self.sim,
+                                 noise_model=self.NOISE_MODEL_LOAD,
+                                 optimization_level=0)
+            dm_noisy = job.result().data()['density_matrix']
+            self.load_into_memory(dm_noisy, self.clock.clock + self.LOAD_TIME)
             return True
         print(f"Failed to load into memory, No slots available")
         return False
 
     def output(self):
+        """
+        Get qubit out of memory, apply noise channel to it.
+        :return:
+        """
+        # Get qubit, decay according to the difference in time between clock + time of read and when it was loaded.
         index = self.get_qubit()
         dm = self.memory[index]['dm']
+        print(dm)
         time = self.memory[index]['time']
+        # Noise model for read time
+        # ============================
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(dm)
+        circuit.i(0)
+        circuit.i(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model = self.NOISE_MODEL_READ,
+                             optimization_level = 0)
+        dm_noisy = job.result().data()['density_matrix']
+        # ============================
         self.memory[index]["time"] = None
         self.memory[index]["dm"] = None
-        return dm, time
+        return dm_noisy, time
 

@@ -1,7 +1,7 @@
 class Clock:
-    def __init__(self,time_step = 1e-8):
+    def __init__(self,clock_speed = 1e-8):
         self.clock = 0
-        self.time_step = time_step
+        self.clock_speed = clock_speed
 
     def tick(self):
-        self.clock += self.time_step
+        self.clock += self.clock_speed

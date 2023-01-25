@@ -33,6 +33,9 @@ class EPRGenerator:
         self.dm = np.kron(self.qb1.dm, self.qb2.dm)
         self.dm = self.cx @ self.dm @ self.cx.conj().transpose()
 
+    def set_dm(self,dm):
+        self.dm = dm
+
     def output(self):
         return self.dm
 
