@@ -61,7 +61,7 @@ class MemoryModule:
         else:
             return True
 
-    def find_two_qubit_address(self,compute_time):
+    def find_two_qubit_address(self):
         assert self.is_two_qubit_available()
         modules = []
         # We first check if there are two separate memories with 2
@@ -72,11 +72,70 @@ class MemoryModule:
                 break
         # If we return a len(1) list, we know that the 2 qubits exist in that module.
         for module in modules:
+            # If it is a len(1) list, you know you have 2 qubits in 1 memory, and hence
+            # must lock for 2t
+            if len(modules) == 1:
+                t = 2
+            else:
+                t = 1
             self.locked_memory[module] = {}
             self.locked_memory[module]["time"] = self.clock.clock
-            self.locked_memory[module]["compute_time"] = compute_time
+            self.locked_memory[module]["compute_time"] = module.READ_TIME * t
             self.memory.remove(module)
         return modules
+
+    def is_same_fidelities(self):
+        fids = {}
+        error = 0.005
+        for module in self.memory:
+            fids[module] = module.get_list_of_fidelities()
+        for cell in fids.keys():
+            for i, (key, value) in enumerate(fids[cell].items()):
+                for cell2 in fids.keys():
+                    for j, (key2, value2) in enumerate(fids[cell2].items()):
+                        if i == j and cell == cell2:
+                            continue
+                        if np.abs(value - value2) < error:
+                            return True
+        return False
+
+    def have_fidelity(self, fidelity):
+        error = 0.005
+        for module in self.memory:
+            mem = module.get_list_of_fidelities()
+            for i, (key, value) in enumerate(mem.items()):
+                if fidelity - value < error:
+                    return True
+        return False
+
+    def get_fidelity_qubit(self, fidelity):
+        error = 0.005
+        for module in self.memory:
+            mem = module.get_list_of_fidelities()
+            for i, (key, value) in enumerate(mem.items()):
+                if fidelity - value < error:
+                    dm = module.output_addressed(i)
+                    self.locked_memory[module] = {}
+                    self.locked_memory[module]["time"] = self.clock.clock
+                    self.locked_memory[module]["compute_time"] = module.READ_TIME
+                    self.memory.remove(module)
+                    return dm
+        return False
+
+    def get_same_fidelities(self):
+        fids = {}
+        error = 0.005
+        for module in self.memory:
+            fids[module] = module.get_list_of_fidelities()
+        for cell in fids.keys():
+            for i, (key, value) in enumerate(fids[cell].items()):
+                for cell2 in fids.keys():
+                    for j, (key2, value2) in enumerate(fids[cell2].items()):
+                        if i == j and cell == cell2:
+                            continue
+                        if np.abs(value - value2) < error:
+                            return cell, i, cell2, j
+        return False
 
     def find_available_qubit(self, clock):
         oldest_memory = None

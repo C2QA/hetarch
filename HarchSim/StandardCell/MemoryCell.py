@@ -3,9 +3,10 @@ import copy
 from enum import Enum
 import qiskit
 import numpy as np
+import qiskit.quantum_info as qi
 # Import from Qiskit Aer noise module
 from qiskit_aer.noise import (NoiseModel, QuantumError, ReadoutError,
-    pauli_error, depolarizing_error, thermal_relaxation_error)
+                              pauli_error, depolarizing_error, thermal_relaxation_error)
 
 
 class MemoryMode(Enum):
@@ -14,12 +15,13 @@ class MemoryMode(Enum):
     IDLE = "available"
     PENDING_OUTPUT = "data read, pending collection"
 
+
 class MemoryCell:
     def __init__(self,
                  cavity: Cavity,
                  transmon: Transmon,
-                 load_time = 300e-9,
-                 read_time = 300e-9):
+                 load_time=300e-9,
+                 read_time=300e-9):
         """
         MemoryCell initialisation. MemoryCells are comprised of one transmon coupled to a cavity. Information
         exchange occurs through SWAP operation, whereby data is SWAPped in and out of memory.
@@ -34,18 +36,18 @@ class MemoryCell:
         self.sim = qiskit.Aer.get_backend('aer_simulator_density_matrix')
         self.LOAD_TIME = load_time
         self.READ_TIME = read_time
-
-        t1 = transmon.t1
-        t2 = transmon.t2
-        error_load = thermal_relaxation_error(t1, t2, self.LOAD_TIME)
-        error_read = thermal_relaxation_error(t1, t2, self.READ_TIME)
+        error_load = thermal_relaxation_error(self.cavity.t1, self.cavity.t2, self.LOAD_TIME)
+        error_read = thermal_relaxation_error(self.cavity.t1, self.cavity.t2, self.READ_TIME)
         noise_model_read = NoiseModel()
         noise_model_load = NoiseModel()
         noise_model_read.add_all_qubit_quantum_error(error_load, ['id'])
         noise_model_load.add_all_qubit_quantum_error(error_read, ['id'])
         self.NOISE_MODEL_READ = noise_model_read
         self.NOISE_MODEL_LOAD = noise_model_load
-
+        self.psi_plus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]]) / 2)
+        self.psi_minus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, -1, 0], [0, -1, 1, 0], [0, 0, 0, 0]]) / 2)
+        self.phi_plus = qi.DensityMatrix(np.array([[1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 1]]) / 2)
+        self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
 
     def initalize_memory(self,
                          extra_tags: list = None):
@@ -105,7 +107,7 @@ class MemoryCell:
     def load_into_memory(self,
                          dm,
                          time,
-                         extra_info = None):
+                         extra_info=None):
         """
         Given a DM, transduce into cavity of lowest level available.
         :param extra_info:
@@ -140,10 +142,13 @@ class MemoryCell:
         return oldest_qubit_index, oldest_qubit_time
 
     def get_qubit(self):
+        """
+        Find a qubit in a given memory cell
+        :return: Returns index of a level in the cavity that has a qubit
+        """
         for i in range(self.cavity.levels):
             if self.memory[i]["dm"] is not None:
                 return i
-
 
     def input(self, dm):
         if self.is_slot_available():
@@ -163,6 +168,18 @@ class MemoryCell:
         print(f"Failed to load into memory, No slots available")
         return False
 
+    def get_list_of_fidelities(self):
+        """
+        Compare the fidelity of each state in memory with a corresponding bell state.
+        Used for finding an appropriate pair to distill together
+        :return: List of fidelities
+        """
+        fids = {}
+        for i in range(self.cavity.levels):
+            if self.memory[i]["dm"] is not None:
+                fids[i] = qi.state_fidelity(self.memory[i]["dm"], self.psi_plus)
+        return fids
+
     def output(self):
         """
         Get qubit out of memory, apply noise channel to it.
@@ -171,7 +188,6 @@ class MemoryCell:
         # Get qubit, decay according to the difference in time between clock + time of read and when it was loaded.
         index = self.get_qubit()
         dm = self.memory[index]['dm']
-        print(dm)
         time = self.memory[index]['time']
         # Noise model for read time
         # ============================
@@ -181,11 +197,34 @@ class MemoryCell:
         circuit.i(1)
         circuit.save_density_matrix()
         job = qiskit.execute(circuit, self.sim,
-                             noise_model = self.NOISE_MODEL_READ,
-                             optimization_level = 0)
+                             noise_model=self.NOISE_MODEL_READ,
+                             optimization_level=0)
         dm_noisy = job.result().data()['density_matrix']
         # ============================
         self.memory[index]["time"] = None
         self.memory[index]["dm"] = None
         return dm_noisy, time
 
+    def output_addressed(self, index):
+        """
+        Get qubit out of memory, apply noise channel to it.
+        :return:
+        """
+        # Get qubit, decay according to the difference in time between clock + time of read and when it was loaded.
+        dm = self.memory[index]['dm']
+        time = self.memory[index]['time']
+        # Noise model for read time
+        # ============================
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(dm)
+        circuit.i(0)
+        circuit.i(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model=self.NOISE_MODEL_READ,
+                             optimization_level=0)
+        dm_noisy = job.result().data()['density_matrix']
+        # ============================
+        self.memory[index]["time"] = None
+        self.memory[index]["dm"] = None
+        return dm_noisy, time

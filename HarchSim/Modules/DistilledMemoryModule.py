@@ -23,5 +23,25 @@ class DistilledMemoryModule(MemoryModule):
                 if cell.memory[i]["dm"] is not None:
                     fids.append(qi.state_fidelity(cell.memory[i]["dm"], self.psi_plus))
         if len(fids) != 0:
-            self.avg_fidelity.append(np.mean(fids))
-            self.max_fidelity.append(np.max(fids))
+            avg_fid = np.mean(fids)
+            if len(self.avg_fidelity) < 5:
+                self.avg_fidelity.append(np.mean(avg_fid))
+            else:
+                l1 = self.avg_fidelity[:-5]
+                l1.append(avg_fid)
+                new_avg = np.mean(l1)
+                self.avg_fidelity.append(new_avg)
+            if len(self.max_fidelity) > 0 and np.max(fids) < np.max(self.max_fidelity):
+                self.max_fidelity.append(np.max(self.max_fidelity))
+            else:
+                self.max_fidelity.append(np.max(fids))
+
+    def is_two_qubit_available_at_same_fidelity(self):
+        n_avail = 0
+        for module in self.memory:
+            if module.n_qb_in_memory() > 0:
+                n_avail += module.n_qb_in_memory()
+        if n_avail < 2:
+            return False
+        else:
+            return True

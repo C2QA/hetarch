@@ -41,7 +41,7 @@ class InputModule:
     def input(self, rho: np.array = None):
         if rho is None:
             # TODO: Abstract this away. This is not flexible. We only will use one though.
-            self.density_matrix =  self.epr_gen[0].output()
+            self.density_matrix = self.epr_gen[0].output()
         else:
             self.density_matrix = rho
         # self.density_matrix = rho

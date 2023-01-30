@@ -5,6 +5,7 @@ from HarchSim.StandardCell import MemoryCell, EPRGenerator, DistillationCell
 from HarchSim.Modules import InputModule, MemoryModule, DistillationModule, DistilledMemoryModule
 from HarchSim.EntanglementDistillationController import EntanglementDistillationController, MODULE
 import numpy as np
+import copy
 import matplotlib.pyplot as plt
 
 # Load ARQUIN M2O Density Matrices.
@@ -14,7 +15,7 @@ dm = np.array(mats[:, :, 25])
 # ===========================
 # Qubit and Cavity properties
 # ===========================
-T1 = T2 = 100e-6
+T1 = T2 = 25e-6
 
 # ===========================
 # Set times below for each operation
@@ -42,13 +43,23 @@ cavity2 = Cavity.Cavity(t1=T1_cavity,
                         t2=T2_cavity,
                         levels=8,
                         modes=2)
+qb3 = copy.copy(qb1)
+qb4 = copy.copy(qb2)
+cavity3 = copy.copy(cavity1)
+cavity4 = copy.copy(cavity2)
 epr_generator = EPRGenerator.EPRGenerator(qb1,
                                           qb2,
                                           cavity1,
                                           cavity2,
                                           T_INPUT_LOAD)
+epr_generator2 = EPRGenerator.EPRGenerator(qb3,
+                                           qb4,
+                                           cavity3,
+                                           cavity4,
+                                           T_INPUT_LOAD)
 epr_generator.set_dm(dm)
 epr_generators = [epr_generator]
+
 input_module = InputModule.InputModule(epr_generators)
 
 # ===========================
