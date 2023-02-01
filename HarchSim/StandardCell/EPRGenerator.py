@@ -14,12 +14,14 @@ class EPRGenerator:
                  qb2: Transmon,
                  cav1: Cavity,
                  cav2: Cavity,
-                 t_catch: float):
+                 t_catch):
         self.qb1 = qb1
         self.qb2 = qb2
         self.cav1 = cav1
         self.cav2 = cav2
-        self.time = t_catch
+        # Usually this will pass a function to t_catch, but we need to define it within the class
+        # such that it can be pickled
+        self.t_catch = self.t_catch_gen()
         self.state = None
         self.dm = None
         self.cx = np.array([[1, 0, 0, 0],
@@ -28,14 +30,17 @@ class EPRGenerator:
                             [0, 0, 1, 0]])
         self.entangle()
 
+    def t_catch_gen(self):
+        np.random.seed(42)
+        return np.random.rand() * 150e-9 + 150e-9
+
     def entangle(self):
         self.qb1.apply_gate("h")
         self.dm = np.kron(self.qb1.dm, self.qb2.dm)
         self.dm = self.cx @ self.dm @ self.cx.conj().transpose()
 
-    def set_dm(self,dm):
+    def set_dm(self, dm):
         self.dm = dm
 
     def output(self):
         return self.dm
-

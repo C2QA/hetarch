@@ -30,7 +30,9 @@ class InputModule:
         for epr in self.epr_gen:
             self.locked_epr_gen[epr] = {}
             self.locked_epr_gen[epr]["time"] = self.clock.clock
-            self.locked_epr_gen[epr]["compute_time"] = 500e-9
+            t_catch = epr.t_catch_gen()
+            self.locked_epr_gen[epr]["compute_time"] = t_catch
+            print(f"Locking Input Module for {t_catch}")
             self.epr_gen.remove(epr)
             return epr.output()
 

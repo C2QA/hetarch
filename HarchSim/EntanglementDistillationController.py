@@ -111,10 +111,26 @@ class EntanglementDistillationController:
         self.clock.tick()
 
     def summary(self):
+        print(f"=== Module Objects ===")
         print(f"=== Input Modules ====\n{self.modules[MODULE.INPUT]}\n" + "=" * 20)
         print(f"=== Memory Module ====\n{self.modules[MODULE.MEMORY]}\n" + "=" * 20)
         print(f"=== Distillation Modules ====\n{self.modules[MODULE.DISTILLATION]}\n" + "=" * 20)
         print(f"=== Distilled Memory Modules ====\n{self.modules[MODULE.DIST_MEMORY]}\n" + "=" * 20)
+        print(f"===" * 20)
+        print(f"=== Cell Objects ===")
+        print(f" ### INPUT ###")
+        print(f"=== Input Cells Available ====\n{self.modules[MODULE.INPUT].epr_gen}\n" + "=" * 20)
+        print(f"=== Input Cells Locked  ====\n{self.modules[MODULE.INPUT].locked_epr_gen}\n" + "=" * 20)
+        print(f" ### MEMORY ###")
+        print(f"=== Memory Cells Available  ====\n{self.modules[MODULE.MEMORY].memory}\n" + "=" * 20)
+        print(f"=== Memory Cells Locked ====\n{self.modules[MODULE.MEMORY].locked_memory}\n" + "=" * 20)
+        print(f" ### DISTILLATION ###")
+        print(f"=== Distillation Cells Available ====\n{self.modules[MODULE.DISTILLATION].distillation_cells}\n" + "=" * 20)
+        print(f"=== Distillation Cells Locked ====\n{self.modules[MODULE.DISTILLATION].locked_cells}\n" + "=" * 20)
+        print(f" ### Distilled Memory ###")
+        print(f"=== Distilled Memory Cells Available  ====\n{self.modules[MODULE.DIST_MEMORY].memory}\n" + "=" * 20)
+        print(f"=== Distilled Memory Cells Locked  ====\n{self.modules[MODULE.DIST_MEMORY].locked_memory}\n" + "=" * 20)
+
         print(f"===" * 20)
 
     def get_fidelity(self, state):
@@ -230,18 +246,17 @@ class EntanglementDistillationController:
         TODO: Implement logic time
         TODO: Noise model implementation
         """
-        MEMORY_TO_DISTILL = 100e-9
-        DISTILL_TO_MEMORY = 100e-9
+        MEMORY_TO_DISTILL = 500e-9
+        DISTILL_TO_MEMORY = 500e-9
         INPUT_TO_MEMORY = 100e-9
-        for _ in range(100):
-            self.tick()
+        for _ in range(2500):
             # Conveyor belt model -> We want to distill up to a
             # point of fidelity. If we hit it, we can remove it
             # from memory. If memory gets full, we can just say
             # that there is no way to distill further. Sending out
             # the highest fidelity.
             for _ in range(3):
-                self.entanglement_distillation_controller_output(target_fidelity=0.93)
+                self.entanglement_distillation_controller_output(target_fidelity=0.985)
             # ==================================================
             # == Begin by checking highest priority operation ==
             # ====== HighPrio : Check if dmm->distilled    =====
@@ -267,10 +282,13 @@ class EntanglementDistillationController:
             for _ in range(3):
                 self.input_to_memory()
             # Now we check if we can unlock anything
+            self.tick()
             self.check_unlock()
             self.check_fidelity()
+            #self.summary()
             print(f"Time: {self.clock.clock}")
-            input()
+
+
 
     # Ancilla functions for better printing.
     @staticmethod

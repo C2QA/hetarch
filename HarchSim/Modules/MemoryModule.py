@@ -131,10 +131,10 @@ class MemoryModule:
             for i, (key, value) in enumerate(fids[cell].items()):
                 for cell2 in fids.keys():
                     for j, (key2, value2) in enumerate(fids[cell2].items()):
-                        if i == j and cell == cell2:
+                        if key == key2 and cell == cell2:
                             continue
                         if np.abs(value - value2) < error:
-                            return cell, i, cell2, j
+                            return cell, key, cell2, key2
         return False
 
     def find_available_qubit(self, clock):

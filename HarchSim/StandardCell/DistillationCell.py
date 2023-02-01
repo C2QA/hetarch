@@ -28,7 +28,7 @@ class DistillationCell:
                      procedure.
     """
 
-    def __init__(self, qb1, qb2, distillation_time):
+    def __init__(self, qb1, qb2, distillation_time, readout_time):
         """
         :param protocol: String variable describing the protocol. e.g. Deutsch
         """
@@ -44,6 +44,7 @@ class DistillationCell:
         self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
         self.sim = qiskit.Aer.get_backend('aer_simulator_density_matrix')
         self.DISTILLATION_TIME = distillation_time
+        self.READOUT_TIME = readout_time
         t1 = qb1.t1
         t2 = qb2.t2
         error_distill = thermal_relaxation_error(t1, t2, self.DISTILLATION_TIME)

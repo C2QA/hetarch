@@ -26,3 +26,4 @@ HarchSim/StandardCell/__pycache__/MemoryCell.cpython-39.pyc
 .ipynb_checkpoints/Untitled-checkpoint.ipynb
 Untitled.ipynb
 dm_m2o.npy
+results/*
