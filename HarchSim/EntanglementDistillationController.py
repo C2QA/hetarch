@@ -79,13 +79,6 @@ class EntanglementDistillationController:
             module.clock = self.clock
             module.bind_clock_to_modules()
 
-    def store_raw_epr_pair(self):
-        """
-        Loads a raw EPR pair into memory
-        """
-        dm, time = self.modules[MODULE.INPUT].output()
-        self.modules[MODULE.INPUT].input(dm)
-
     def fetch_raw_epr_pair(self):
         """
         :return: Returns a raw epr pair out of memory

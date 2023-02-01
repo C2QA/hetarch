@@ -10,6 +10,11 @@ from qiskit_aer.noise import (NoiseModel, QuantumError, ReadoutError,
 
 class DistilledMemoryModule(MemoryModule):
     def __init__(self, memory: list[MemoryCell]):
+        """
+        Initialise the DistilledMemoryModule object. Very similar to MemoryModule, just with ancilla
+        tracking features implemented
+        :param memory: List of memory cells
+        """
         super().__init__(memory)
         self.sim = qiskit.Aer.get_backend('aer_simulator_density_matrix')
         self.avg_fidelity = []
@@ -20,6 +25,13 @@ class DistilledMemoryModule(MemoryModule):
         self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
 
     def track_fidelity(self):
+        """
+        Logic for tracking fidelity over the distilled memory module.
+        Current logic takes in the entire memory module, and reports the average fidelity across the system
+        as well as the maximum currently available pair.
+        Any pair consumed for output or currently being distilled will not be part of the calculation.
+        :return: None
+        """
         fids = []
         for cell in self.memory:
             for i in range(cell.cavity.levels):
@@ -59,13 +71,3 @@ class DistilledMemoryModule(MemoryModule):
             #     self.max_fidelity.append(np.max(self.max_fidelity))
             # else:
             self.max_fidelity.append(np.max(fids))
-
-    def is_two_qubit_available_at_same_fidelity(self):
-        n_avail = 0
-        for module in self.memory:
-            if module.n_qb_in_memory() > 0:
-                n_avail += module.n_qb_in_memory()
-        if n_avail < 2:
-            return False
-        else:
-            return True
