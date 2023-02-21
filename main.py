@@ -17,7 +17,7 @@ dm = np.array(mats[:, :, 25])
 # ===========================
 # Qubit and Cavity properties
 # ===========================
-T1 = T2 = 100e-6
+T1 = T2 = 200e-6
 
 
 # ===========================
@@ -26,7 +26,7 @@ T1 = T2 = 100e-6
 # You cant pickle a reference to a function. You need to define this within the InputModule
 def T_INPUT_FN():
     # Random number between 150e-9 and 300e-9
-    return np.random.rand() * 150e-9 + 150e-9
+    return np.random.rand() * 250e-9 + 500e-9
 
 
 T_INPUT_LOAD = T_INPUT_FN
@@ -45,7 +45,7 @@ N_CAVITY_LEVELS = 8
 # Constructing an input module
 # ===========================
 # Build 2 Transmon, 2 Cavity, into EPR generator, into InputModule
-T1_cavity = T2_cavity = 800e-6
+T1_cavity = T2_cavity = 1600e-6
 # For simulation of a transmon as a "cavity", we set its T1 to 100, and then levels = 3 ( 3 qubits), and 2 modes
 # T1_cavity = T2_cavity = 100e-6
 
@@ -78,8 +78,7 @@ epr_generator2 = EPRGenerator.EPRGenerator(qb3,
                                            cavity4,
                                            T_INPUT_LOAD)
 epr_generator.set_dm(dm)
-# 2 epr generatores doesnt work for some reason
-# TODO: Fix this bug
+# TODO: Fix this bug. 2 epr generators doesnt work for some reason
 epr_generators = [epr_generator]
 
 input_module = InputModule.InputModule(epr_generators)
@@ -122,7 +121,6 @@ transmon_memory_dist = Transmon.Transmon(t1=T1,
 memory_cell_distilled = MemoryCell.MemoryCell(cavity_memory_dist, transmon_memory_dist)
 memory_cell_distilled.initalize_memory()
 memory_module_distilled = DistilledMemoryModule.DistilledMemoryModule([memory_cell_distilled])
-
 # =====================================
 # Constructing a distillation module
 # ======================================
@@ -148,6 +146,7 @@ controller.set_distillation_module(dist_module)
 controller.set_distilled_memory_module(memory_module_distilled)
 controller.set_sim_times(LOAD_TIMES)
 controller.bind_clock_to_modules()
+controller.set_cycles(cycles=50000)
 # Run the controller.
 controller.run()
 

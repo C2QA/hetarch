@@ -34,6 +34,7 @@ class EntanglementDistillationController:
         self.psi_minus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, -1, 0], [0, -1, 1, 0], [0, 0, 0, 0]]) / 2)
         self.phi_plus = qi.DensityMatrix(np.array([[1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 1]]) / 2)
         self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
+        self.CYCLES = 5000  # Default Cycle count
         # Set times for operations
         self.T_Catch = None
         self.T_SWAP_INTO_MEMORY = None
@@ -147,6 +148,15 @@ class EntanglementDistillationController:
 
         print(f"===" * 20)
 
+    def summary_memory(self):
+        print(f" ===== Input EPR Memory Status ====== ")
+        for key,value in self.modules[MODULE.MEMORY].get_n_epr().items():
+            print(f"{key} #n EPR: {value}")
+        print(f" ===== Distilled EPR Memory Status ====== ")
+        for key, value in self.modules[MODULE.MEMORY].get_n_epr().items():
+            print(f"{key} #n EPR : {value}")
+        print('-'*20)
+
     def get_fidelity(self, state):
         fidel = qi.state_fidelity(state, self.phi_plus)
         return fidel
@@ -172,15 +182,17 @@ class EntanglementDistillationController:
         First step of this is to check if this operation can be done at this clock cycle.
         :return: None
         """
-        qubit_available = self.modules[MODULE.DIST_MEMORY].is_same_fidelities()
+        ERROR = 0.02
+        qubit_available = self.modules[MODULE.DIST_MEMORY].is_same_fidelities(error=ERROR)
         cell_available = self.modules[MODULE.DISTILLATION].is_cell_available()
         if qubit_available and cell_available:
             print(f" === DM2D FIRING ===")
-            module1, i, module2, j = self.modules[MODULE.DIST_MEMORY].get_same_fidelities(self.T_SWAP_OUT_MEMORY)
+            module1, i, module2, j = self.modules[MODULE.DIST_MEMORY].get_same_fidelities(self.T_SWAP_OUT_MEMORY,
+                                                                                          error=ERROR)
             cell = self.modules[MODULE.DISTILLATION].get_available_cell(self.T_READ_INTO_DISTILLATION)
             if module1 == module2:
                 dm1, t_qubit1 = module1.output_addressed(i, self.T_SWAP_OUT_MEMORY)
-                dm2, t_qubit2 = module2.output_addressed(j, 2*self.T_SWAP_OUT_MEMORY)
+                dm2, t_qubit2 = module2.output_addressed(j, 2 * self.T_SWAP_OUT_MEMORY)
             else:
                 dm1, t_qubit1 = module1.output_addressed(i, self.T_SWAP_OUT_MEMORY)
                 dm2, t_qubit2 = module2.output_addressed(j, self.T_SWAP_OUT_MEMORY)
@@ -250,6 +262,14 @@ class EntanglementDistillationController:
             dm = self.modules[MODULE.DIST_MEMORY].get_fidelity_qubit(target_fidelity, self.T_SWAP_OUT_MEMORY)
             print(f"Outputted Density Matrix: {dm}")
 
+    def set_cycles(self, cycles):
+        """
+        Set number of cycles to sim over
+        :param cycles: Num cycles to sim over
+        :return: None
+        """
+        self.CYCLES = cycles
+
     def run(self):
         """
         This function is responsible for all logic, and distilling the system. All logic is computed etc.
@@ -264,7 +284,7 @@ class EntanglementDistillationController:
         change in the modules occurs.
 
         """
-        for _ in range(2500):
+        for _ in range(self.CYCLES):
             # Conveyor belt model -> We want to distill up to a
             # point of fidelity. If we hit it, we can remove it
             # from memory. If memory gets full, we can just say
@@ -300,5 +320,5 @@ class EntanglementDistillationController:
             self.tick()
             self.check_unlock()
             self.check_fidelity()
-            # self.summary()
-            print(f"Time: {self.clock.clock}")
+            self.summary_memory()
+            #print(f"Time: {self.clock.clock}")

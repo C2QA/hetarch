@@ -93,7 +93,7 @@ class DistillationModule:
             return True
         return False
 
-    def get_output(self,lock_time):
+    def get_output(self,readout_time):
         """
         Find a distillation cell that is pending a qubit output (through use of cell.is_pending_output()).
         Return the density matrix of one if it is pending, and lock if for the LOAD_TIME
@@ -101,9 +101,9 @@ class DistillationModule:
         """
         for cell in self.distillation_cells:
             if cell.is_pending_output():
-                dm = cell.output()
+                dm = cell.output(readout_time)
                 self.locked_cells[cell] = {}
                 self.locked_cells[cell]["time"] = self.clock.clock
-                self.locked_cells[cell]["compute_time"] = lock_time
+                self.locked_cells[cell]["compute_time"] = readout_time
                 self.distillation_cells.remove(cell)
                 return dm

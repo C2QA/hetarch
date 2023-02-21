@@ -142,18 +142,7 @@ class MemoryCell:
         if self.is_slot_available():
             # Noise model for load time
             # ============================
-            error_load = thermal_relaxation_error(self.transmon.t1, self.transmon.t1, time)
-            noise_model = NoiseModel()
-            noise_model.add_all_qubit_quantum_error(error_load, ['id'])
-            circuit = qiskit.QuantumCircuit(2)
-            circuit.set_density_matrix(dm)
-            circuit.id(0)
-            circuit.id(1)
-            circuit.save_density_matrix()
-            job = qiskit.execute(circuit, self.sim,
-                                 noise_model= noise_model,
-                                 optimization_level=0)
-            dm_noisy = job.result().data()['density_matrix']
+            dm_noisy = self.apply_noise_transmon(dm, time)
             self.load_into_memory(dm_noisy, self.clock.clock + time)
             return True
         print(f"Failed to load into memory, No slots available")
@@ -171,7 +160,7 @@ class MemoryCell:
                 fids[i] = qi.state_fidelity(self.memory[i]["dm"], self.psi_plus)
         return fids
 
-    def output(self, time):
+    def output(self, t):
         """
         Get qubit out of memory, apply noise channel to it.
         :return:
@@ -180,34 +169,19 @@ class MemoryCell:
         index = self.get_qubit()
         dm = self.memory[index]['dm']
         time = self.memory[index]['time']
-        # Noise model for read time
-        # ============================
-        error_load = thermal_relaxation_error(self.cavity.t1, self.cavity.t2, time)
-        noise_model = NoiseModel()
-        noise_model.add_all_qubit_quantum_error(error_load, ['id'])
-        circuit = qiskit.QuantumCircuit(2)
-        circuit.set_density_matrix(dm)
-        circuit.i(0)
-        circuit.i(1)
-        circuit.save_density_matrix()
-        job = qiskit.execute(circuit, self.sim,
-                             noise_model= noise_model,
-                             optimization_level=0)
-        dm_noisy = job.result().data()['density_matrix']
+        dm_noisy = self.apply_noise_cavity(dm, t + self.clock.clock - time)
         # ============================
         self.memory[index]["time"] = None
         self.memory[index]["dm"] = None
         return dm_noisy, time
 
-    def output_addressed(self, index, time):
+    def apply_noise_cavity(self, dm, time):
         """
-        Get qubit out of memory, apply noise channel to it.
-        :return:
+        Apply noise model based on Cavity T1/T2 for time 'time'
+        :param dm: Density matrix (4x4) that noise model will be applied to
+        :param time: Time for T1/T2 decay
+        :return: Noisy density matrix
         """
-        # Get qubit, decay according to the difference in time between clock + time of read and when it was loaded.
-        dm = self.memory[index]['dm']
-        time = self.memory[index]['time']
-        # Noise model generation
         error_load = thermal_relaxation_error(self.cavity.t1, self.cavity.t2, time)
         noise_model = NoiseModel()
         noise_model.add_all_qubit_quantum_error(error_load, ['id'])
@@ -222,6 +196,40 @@ class MemoryCell:
                              noise_model=noise_model,
                              optimization_level=0)
         dm_noisy = job.result().data()['density_matrix']
+        return dm_noisy
+
+    def apply_noise_transmon(self, dm, time):
+        """
+        Apply noise model based on Cavity T1/T2 for time 'time'
+        :param dm: Density matrix (4x4) that noise model will be applied to
+        :param time: Time for T1/T2 decay
+        :return: Noisy density matrix
+        """
+        error_load = thermal_relaxation_error(self.transmon.t1, self.transmon.t2, time)
+        noise_model = NoiseModel()
+        noise_model.add_all_qubit_quantum_error(error_load, ['id'])
+        # Noise model for read time
+        # ============================
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(dm)
+        circuit.i(0)
+        circuit.i(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model=noise_model,
+                             optimization_level=0)
+        dm_noisy = job.result().data()['density_matrix']
+        return dm_noisy
+
+    def output_addressed(self, index, t_readout):
+        """
+        Get qubit out of memory, apply noise channel to it.
+        :return:
+        """
+        # Get qubit, decay according to the difference in time between clock + time of read and when it was loaded.
+        dm = self.memory[index]['dm']
+        time = self.memory[index]['time']
+        dm_noisy = self.apply_noise_cavity(dm, t_readout + self.clock.clock - time)
         # ============================
         self.memory[index]["time"] = None
         self.memory[index]["dm"] = None

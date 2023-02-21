@@ -24,6 +24,16 @@ class MemoryModule:
         for memory in self.memory:
             memory.ACTIVE = []
 
+    def get_n_epr(self):
+        data = {}
+        for module in self.memory:
+            n_qb = module.n_qb_in_memory()
+            data[module] = n_qb
+        for module in self.locked_memory:
+            n_qb = module.n_qb_in_memory()
+            data[module] = n_qb
+        return data
+
     def find_empty_available_memory(self):
         """
         Check if any memory in the self.memory list (if it is in this list, it is unlocked), for an available
@@ -122,7 +132,7 @@ class MemoryModule:
             self.memory.remove(module)
         return modules
 
-    def is_same_fidelities(self):
+    def is_same_fidelities(self, error):
         """
         For successful distillation, we need to have two pairs at similar fidelities. Hence, we must check
         if we have two qubits at a similar fidelity. Currently, we do O(n^2) checks, but this can be improved
@@ -130,7 +140,6 @@ class MemoryModule:
         :return: If we have two at similar fidelity, return True, otherwise False
         """
         fids = {}
-        error = 0.005
         for module in self.memory:
             fids[module] = module.get_list_of_fidelities()
         for cell in fids.keys():
@@ -185,7 +194,7 @@ class MemoryModule:
                     return dm
         return False
 
-    def get_same_fidelities(self, time):
+    def get_same_fidelities(self, time, error):
         """
         For the distillation of a distilled pair, we want to make sure that we are distilling an appropriate
         pair. For that, we find the first pair of qubits that are at the same fidelity, and distill them
@@ -194,7 +203,6 @@ class MemoryModule:
         KEY. cell2 is MemoryCell2, and key2 is the key for the qubit in MemoryCell2.
         """
         fids = {}
-        error = 0.005
         for module in self.memory:
             fids[module] = module.get_list_of_fidelities()
         for cell in fids.keys():
@@ -250,4 +258,5 @@ class MemoryModule:
         self.locked_memory[module]["compute_time"] = time
         self.memory.remove(module)
         # This has noise modelling in it. Do not need to do it here.
+        # Noise modelling should be kept at submodule level, as noise model is a function of hardware T1/T2 times.
         module.input(dm, time)

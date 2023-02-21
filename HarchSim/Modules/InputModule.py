@@ -35,7 +35,7 @@ class InputModule:
         for epr in self.epr_gen:
             return True
 
-    def get_input(self,time):
+    def get_input(self, time):
         """
         Get first available EPR Generator pair. Will lock the first one available for a random time based on
         the generation rate probability distribution t_catch_gen
@@ -45,7 +45,6 @@ class InputModule:
             self.locked_epr_gen[epr] = {}
             self.locked_epr_gen[epr]["time"] = self.clock.clock
             self.locked_epr_gen[epr]["compute_time"] = time
-            print(f"Locking Input Module for {time}")
             self.epr_gen.remove(epr)
             return epr.output()
 
