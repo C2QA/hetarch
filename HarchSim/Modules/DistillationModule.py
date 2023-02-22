@@ -30,7 +30,7 @@ class DistillationModule:
                 return True
         return False
 
-    def get_available_cell(self):
+    def get_available_cell(self,time):
         """
         Find a distillation cell that is available, and lock it for the compute time of a distillation routine
         :return: DistillationCell object
@@ -41,7 +41,7 @@ class DistillationModule:
                 break
         self.locked_cells[valid_cell] = {}
         self.locked_cells[valid_cell]["time"] = self.clock.clock
-        self.locked_cells[valid_cell]["compute_time"] = cell.DISTILLATION_TIME
+        self.locked_cells[valid_cell]["compute_time"] = time
         self.distillation_cells.remove(valid_cell)
         return valid_cell
 
@@ -78,8 +78,10 @@ class DistillationModule:
 
     def input(self,
               qb1: np.array,
-              qb2: np.array):
+              qb2: np.array,
+              time):
         """
+        :param time: Time to load in
         :param qb1: Density matrix representing EPR Pair of Qubit 1
         :param qb2: Density matrix representing EPR Pair of Qubit 2
         :return: True if available cell to distill. This is only called when we have an available cell.
@@ -87,11 +89,11 @@ class DistillationModule:
         """
         cell = self.find_available_cell()
         if cell is not None:
-            cell.input(qb1, qb2)
+            cell.input(qb1, qb2, time)
             return True
         return False
 
-    def get_output(self):
+    def get_output(self,readout_time):
         """
         Find a distillation cell that is pending a qubit output (through use of cell.is_pending_output()).
         Return the density matrix of one if it is pending, and lock if for the LOAD_TIME
@@ -99,9 +101,9 @@ class DistillationModule:
         """
         for cell in self.distillation_cells:
             if cell.is_pending_output():
-                dm = cell.output()
+                dm = cell.output(readout_time)
                 self.locked_cells[cell] = {}
                 self.locked_cells[cell]["time"] = self.clock.clock
-                self.locked_cells[cell]["compute_time"] = cell.READOUT_TIME
+                self.locked_cells[cell]["compute_time"] = readout_time
                 self.distillation_cells.remove(cell)
                 return dm

@@ -31,6 +31,7 @@ class EPRGenerator:
         self.entangle()
 
     def t_catch_gen(self):
+        # Change this to a poisson distribution
         np.random.seed(42)
         return np.random.rand() * 150e-9 + 150e-9
 

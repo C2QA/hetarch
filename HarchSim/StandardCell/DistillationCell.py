@@ -28,14 +28,13 @@ class DistillationCell:
                      procedure.
     """
 
-    def __init__(self, qb1, qb2, distillation_time, readout_time):
+    def __init__(self, qb1, qb2):
         """
         :param protocol: String variable describing the protocol. e.g. Deutsch
         """
         self.available = True
         self.output_dm = None
         self.qb1 = qb1
-
         self.qb2 = qb2
         self.PENDING = False
         self.psi_plus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]]) / 2)
@@ -43,14 +42,12 @@ class DistillationCell:
         self.phi_plus = qi.DensityMatrix(np.array([[1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 1]]) / 2)
         self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
         self.sim = qiskit.Aer.get_backend('aer_simulator_density_matrix')
-        self.DISTILLATION_TIME = distillation_time
-        self.READOUT_TIME = readout_time
         t1 = qb1.t1
         t2 = qb2.t2
-        error_distill = thermal_relaxation_error(t1, t2, self.DISTILLATION_TIME)
-        noise_model_distill = NoiseModel()
-        noise_model_distill.add_all_qubit_quantum_error(error_distill, ['id'])
-        self.NOISE_MODEL_DISTILL = noise_model_distill
+        error_load = thermal_relaxation_error(self.qb1.t1, self.qb1.t1, 500e-9) # 500ns for 1 distillation round
+        noise_model = NoiseModel()
+        noise_model.add_all_qubit_quantum_error(error_load, ['id'])
+        self.NOISE_MODEL_DISTILL = noise_model
 
     def QPA_circuit(self, rho_1, rho_2):
         # https://journals.aps.org/prl/pdf/10.1103/PhysRevLett.77.2818
@@ -84,7 +81,7 @@ class DistillationCell:
                              optimization_level = 0)
         dm_noisy = job.result().data()['density_matrix']
         # ============================
-        return measured_state, dm_noisy, success_prob
+        return measured_state, rho_final, success_prob
 
     # Distillation function for any register
     def distill(self):
@@ -114,17 +111,78 @@ class DistillationCell:
     def set_available(self):
         self.available = True
 
-    def input(self, rho1, rho2):
+    def apply_noise(self,rho1, rho2, time):
         """
-        :param qubit1: Density matrix of Qubit 1 to be distilled
-        :param qubit2: Density matrix of Qubit 2 to be distilled
+        :param rho1: Density Matrix 1 representing EPR pair 1 state
+        :param rho2: Density Matrix 2 representing EPR pair 2 state
+        :param time: Time for noise to apply
+        :return:
+        """
+        error_load = thermal_relaxation_error(self.qb1.t1, self.qb1.t1, time)
+        noise_model = NoiseModel()
+        noise_model.add_all_qubit_quantum_error(error_load, ['id'])
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(rho1)
+        circuit.id(0)
+        circuit.id(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model=noise_model,
+                             optimization_level=0)
+        rho1_noisy = job.result().data()['density_matrix']
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(rho2)
+        circuit.id(0)
+        circuit.id(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model=noise_model,
+                             optimization_level=0)
+        rho2_noisy = job.result().data()['density_matrix']
+        return rho1_noisy, rho2_noisy
+
+    def input(self, rho1, rho2, time):
+        """
+        :param time: Time it takes to SWAP in
+        :param rho1: Density matrix of Qubit 1 to be distilled
+        :param rho2: Density matrix of Qubit 2 to be distilled
         :return: Purified Density matrix
         """
-        self.qb1.set_state(rho1)
-        self.qb2.set_state(rho2)
+        rho1_noisy, rho2_noisy = self.apply_noise(rho1, rho2, time)
+        self.qb1.set_state(rho1_noisy)
+        self.qb2.set_state(rho2_noisy)
         self.output_dm = self.distill()
 
-    def output(self):
+    def apply_noise_transmon(self, dm, time):
+        """
+        Apply noise model based on Cavity T1/T2 for time 'time'
+        :param dm: Density matrix (4x4) that noise model will be applied to
+        :param time: Time for T1/T2 decay
+        :return: Noisy density matrix
+        """
+        error_load = thermal_relaxation_error(self.qb1.t1, self.qb1.t2, time)
+        noise_model = NoiseModel()
+        noise_model.add_all_qubit_quantum_error(error_load, ['id'])
+        # Noise model for read time
+        # ============================
+        circuit = qiskit.QuantumCircuit(2)
+        circuit.set_density_matrix(dm)
+        circuit.i(0)
+        circuit.i(1)
+        circuit.save_density_matrix()
+        job = qiskit.execute(circuit, self.sim,
+                             noise_model=noise_model,
+                             optimization_level=0)
+        dm_noisy = job.result().data()['density_matrix']
+        return dm_noisy
+
+    def output(self,
+               readout_time):
+        """
+        :param readout_time: Time to readout. Apply T1/T2 decay accordingly
+        :return: Output density matrix
+        """
         out = copy.copy(self.output_dm)
+        out = self.apply_noise_transmon(out, readout_time)
         self.output_dm = None
         return out

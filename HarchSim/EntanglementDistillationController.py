@@ -29,10 +29,31 @@ class EntanglementDistillationController:
         """
         self.modules = {}
         self.clock = Clock(clock_speed=clock_speed)
+        # Set target bell pair states
         self.psi_plus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]]) / 2)
         self.psi_minus = qi.DensityMatrix(np.array([[0, 0, 0, 0], [0, 1, -1, 0], [0, -1, 1, 0], [0, 0, 0, 0]]) / 2)
         self.phi_plus = qi.DensityMatrix(np.array([[1, 0, 0, 1], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 1]]) / 2)
         self.phi_minus = qi.DensityMatrix(np.array([[1, 0, 0, -1], [0, 0, 0, 0], [0, 0, 0, 0], [-1, 0, 0, 1]]) / 2)
+        self.CYCLES = 5000  # Default Cycle count
+        # Set times for operations
+        self.T_Catch = None
+        self.T_SWAP_INTO_MEMORY = None
+        self.T_SWAP_OUT_MEMORY = None
+        self.T_READ_INTO_DISTILLATION = None
+        self.T_READ_OUT_DISTILLATION = None
+
+    def set_sim_times(self,
+                      times: dict):
+        """
+        Pass a dictionary with the time parameters, which are read and then set for the simulation
+        :param times: Dictionary with the keys
+        :return:  None
+        """
+        self.T_Catch = times['t_catch']
+        self.T_SWAP_INTO_MEMORY = times['t_swap_into_memory']
+        self.T_SWAP_OUT_MEMORY = times['t_swap_out_memory']
+        self.T_READ_INTO_DISTILLATION = times['t_read_into_distillation']
+        self.T_READ_OUT_DISTILLATION = times['t_read_out_distillation']
 
     def set_input_module(self, input_module):
         """
@@ -118,7 +139,8 @@ class EntanglementDistillationController:
         print(f"=== Memory Cells Available  ====\n{self.modules[MODULE.MEMORY].memory}\n" + "=" * 20)
         print(f"=== Memory Cells Locked ====\n{self.modules[MODULE.MEMORY].locked_memory}\n" + "=" * 20)
         print(f" ### DISTILLATION ###")
-        print(f"=== Distillation Cells Available ====\n{self.modules[MODULE.DISTILLATION].distillation_cells}\n" + "=" * 20)
+        print(
+            f"=== Distillation Cells Available ====\n{self.modules[MODULE.DISTILLATION].distillation_cells}\n" + "=" * 20)
         print(f"=== Distillation Cells Locked ====\n{self.modules[MODULE.DISTILLATION].locked_cells}\n" + "=" * 20)
         print(f" ### Distilled Memory ###")
         print(f"=== Distilled Memory Cells Available  ====\n{self.modules[MODULE.DIST_MEMORY].memory}\n" + "=" * 20)
@@ -126,11 +148,20 @@ class EntanglementDistillationController:
 
         print(f"===" * 20)
 
+    def summary_memory(self):
+        print(f" ===== Input EPR Memory Status ====== ")
+        for key,value in self.modules[MODULE.MEMORY].get_n_epr().items():
+            print(f"{key} #n EPR: {value}")
+        print(f" ===== Distilled EPR Memory Status ====== ")
+        for key, value in self.modules[MODULE.MEMORY].get_n_epr().items():
+            print(f"{key} #n EPR : {value}")
+        print('-'*20)
+
     def get_fidelity(self, state):
         fidel = qi.state_fidelity(state, self.phi_plus)
         return fidel
 
-    def distilled_to_memory(self, t_dist_to_memory):
+    def distilled_to_memory(self):
         """
         Logic implementation for taking a distilled qubit out of a distillation cell, and moving it into
         distilled memory.
@@ -142,8 +173,8 @@ class EntanglementDistillationController:
         memory_pending = self.modules[MODULE.DIST_MEMORY].is_cell_available()
         if memory_pending and distilled_pending:
             print(f" === D2M FIRING ===")
-            dm = self.modules[MODULE.DISTILLATION].get_output()
-            self.modules[MODULE.DIST_MEMORY].input(dm)
+            dm = self.modules[MODULE.DISTILLATION].get_output(self.T_READ_OUT_DISTILLATION)
+            self.modules[MODULE.DIST_MEMORY].input(dm, self.T_SWAP_INTO_MEMORY)
 
     def distilled_memory_to_distillation(self):
         """
@@ -151,15 +182,21 @@ class EntanglementDistillationController:
         First step of this is to check if this operation can be done at this clock cycle.
         :return: None
         """
-        qubit_available = self.modules[MODULE.DIST_MEMORY].is_same_fidelities()
+        ERROR = 0.02
+        qubit_available = self.modules[MODULE.DIST_MEMORY].is_same_fidelities(error=ERROR)
         cell_available = self.modules[MODULE.DISTILLATION].is_cell_available()
         if qubit_available and cell_available:
             print(f" === DM2D FIRING ===")
-            module1, i, module2, j = self.modules[MODULE.DIST_MEMORY].get_same_fidelities()
-            cell = self.modules[MODULE.DISTILLATION].get_available_cell()
-            dm1, t_qubit1 = module1.output_addressed(i)
-            dm2, t_qubit2 = module2.output_addressed(j)
-            cell.input(dm1, dm2)
+            module1, i, module2, j = self.modules[MODULE.DIST_MEMORY].get_same_fidelities(self.T_SWAP_OUT_MEMORY,
+                                                                                          error=ERROR)
+            cell = self.modules[MODULE.DISTILLATION].get_available_cell(self.T_READ_INTO_DISTILLATION)
+            if module1 == module2:
+                dm1, t_qubit1 = module1.output_addressed(i, self.T_SWAP_OUT_MEMORY)
+                dm2, t_qubit2 = module2.output_addressed(j, 2 * self.T_SWAP_OUT_MEMORY)
+            else:
+                dm1, t_qubit1 = module1.output_addressed(i, self.T_SWAP_OUT_MEMORY)
+                dm2, t_qubit2 = module2.output_addressed(j, self.T_SWAP_OUT_MEMORY)
+            cell.input(dm1, dm2, self.T_SWAP_INTO_MEMORY)
 
     def check_unlock(self):
         """
@@ -180,12 +217,14 @@ class EntanglementDistillationController:
         input_available = self.modules[MODULE.INPUT].is_input_available()
         cell_available = self.modules[MODULE.MEMORY].is_cell_available()
         if input_available and cell_available:
+            # Generate a random catch time
+            t_catch = self.T_Catch()
             print(f"I2M FIRING")
-            cell = self.modules[MODULE.MEMORY].get_empty_available_memory()
-            input = self.modules[MODULE.INPUT].get_input()
-            cell.input(input)
+            cell = self.modules[MODULE.MEMORY].get_empty_available_memory(self.T_SWAP_INTO_MEMORY)
+            input = self.modules[MODULE.INPUT].get_input(t_catch)
+            cell.input(input, self.T_SWAP_INTO_MEMORY)
 
-    def memory_to_distillation(self, compute_time):
+    def memory_to_distillation(self):
         """
         Logic implementation for taking a pair from non-distilled memory,
          and moving it into a distillation cell where it will be distilled.
@@ -196,15 +235,15 @@ class EntanglementDistillationController:
         cell_available = self.modules[MODULE.DISTILLATION].is_cell_available()
         if qubit_available and cell_available:
             print(f" === M2D FIRING ===")
-            modules = self.modules[MODULE.MEMORY].find_two_qubit_address()
-            cell = self.modules[MODULE.DISTILLATION].get_available_cell()
+            modules = self.modules[MODULE.MEMORY].find_two_qubit_address(self.T_SWAP_INTO_MEMORY)
+            cell = self.modules[MODULE.DISTILLATION].get_available_cell(self.T_READ_OUT_DISTILLATION)
             if len(modules) == 1:
-                dm1, t_qubit1 = modules[0].output()
-                dm2, t_qubit2 = modules[0].output()
+                dm1, t_qubit1 = modules[0].output(self.T_SWAP_OUT_MEMORY)
+                dm2, t_qubit2 = modules[0].output(self.T_SWAP_OUT_MEMORY)
             else:
-                dm1, t_qubit1 = modules[0].output()
-                dm2, t_qubit2 = modules[1].output()
-            cell.input(dm1, dm2)
+                dm1, t_qubit1 = modules[0].output(self.T_SWAP_OUT_MEMORY)
+                dm2, t_qubit2 = modules[1].output(self.T_SWAP_OUT_MEMORY)
+            cell.input(dm1, dm2, self.T_READ_INTO_DISTILLATION)
 
     def check_fidelity(self):
         self.modules[MODULE.DIST_MEMORY].track_fidelity()
@@ -220,8 +259,16 @@ class EntanglementDistillationController:
         """
         have_fidelity = self.modules[MODULE.DIST_MEMORY].have_fidelity(target_fidelity)
         if have_fidelity:
-            dm = self.modules[MODULE.DIST_MEMORY].get_fidelity_qubit(target_fidelity)
+            dm = self.modules[MODULE.DIST_MEMORY].get_fidelity_qubit(target_fidelity, self.T_SWAP_OUT_MEMORY)
             print(f"Outputted Density Matrix: {dm}")
+
+    def set_cycles(self, cycles):
+        """
+        Set number of cycles to sim over
+        :param cycles: Num cycles to sim over
+        :return: None
+        """
+        self.CYCLES = cycles
 
     def run(self):
         """
@@ -236,20 +283,15 @@ class EntanglementDistillationController:
         each operation as many times as possible, a wrapper in a while True can be implemented until no
         change in the modules occurs.
 
-        TODO: Implement logic time
-        TODO: Noise model implementation
         """
-        MEMORY_TO_DISTILL = 500e-9
-        DISTILL_TO_MEMORY = 500e-9
-        INPUT_TO_MEMORY = 100e-9
-        for _ in range(2500):
+        for _ in range(self.CYCLES):
             # Conveyor belt model -> We want to distill up to a
             # point of fidelity. If we hit it, we can remove it
             # from memory. If memory gets full, we can just say
             # that there is no way to distill further. Sending out
             # the highest fidelity.
             for _ in range(3):
-                self.entanglement_distillation_controller_output(target_fidelity=0.985)
+                self.entanglement_distillation_controller_output(target_fidelity=0.94)
             # ==================================================
             # == Begin by checking highest priority operation ==
             # ====== HighPrio : Check if dmm->distilled    =====
@@ -261,13 +303,13 @@ class EntanglementDistillationController:
             # ====== HighPrio : Check if distilled->memory =====
             # ==================================================
             for _ in range(3):
-                self.distilled_to_memory(DISTILL_TO_MEMORY)
+                self.distilled_to_memory()
             # ==================================================
             # ==== Now check 3rd priority operation          ===
             # ===== 3rd Prio : Check if Memory->Distillation ===
             # ==================================================
             for _ in range(3):
-                self.memory_to_distillation(MEMORY_TO_DISTILL)
+                self.memory_to_distillation()
             # ==================================================
             # ==== Now start checking 4th priority operation ===
             # ====== 4th Prio:Check if Input->memory avail =====
@@ -278,29 +320,5 @@ class EntanglementDistillationController:
             self.tick()
             self.check_unlock()
             self.check_fidelity()
-            #self.summary()
-            print(f"Time: {self.clock.clock}")
-
-
-
-    # Ancilla functions for better printing.
-    @staticmethod
-    def box_lines(lines, width):
-        topBottomRow = "+" + "-" * width + "+"
-        middle = "\n".join("|" + x.ljust(width) + "|" for x in lines)
-        return "{0}\n{1}\n{0}".format(topBottomRow, middle)
-
-    @staticmethod
-    def split_line(line, width):
-        return [line[i:i + width] for i in range(0, len(line), width)]
-
-    @staticmethod
-    def split_msg(msg, width):
-        lines = msg.split("\n")
-        split_lines = [EntanglementDistillationController.split_line(line, width) for line in lines]
-        return [item for sublist in split_lines for item in sublist]  # flatten
-
-    @staticmethod
-    def border_msg(msg, width):
-        return (EntanglementDistillationController.box_lines(
-            EntanglementDistillationController.split_msg(msg, width), width))
+            self.summary_memory()
+            #print(f"Time: {self.clock.clock}")

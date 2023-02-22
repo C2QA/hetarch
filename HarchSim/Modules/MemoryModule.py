@@ -2,6 +2,8 @@ import qiskit
 import numpy as np
 from datetime import datetime
 from HarchSim.StandardCell.MemoryCell import MemoryCell
+from qiskit_aer.noise import (NoiseModel, QuantumError, ReadoutError,
+                              pauli_error, depolarizing_error, thermal_relaxation_error)
 
 
 class MemoryModule:
@@ -22,6 +24,16 @@ class MemoryModule:
         for memory in self.memory:
             memory.ACTIVE = []
 
+    def get_n_epr(self):
+        data = {}
+        for module in self.memory:
+            n_qb = module.n_qb_in_memory()
+            data[module] = n_qb
+        for module in self.locked_memory:
+            n_qb = module.n_qb_in_memory()
+            data[module] = n_qb
+        return data
+
     def find_empty_available_memory(self):
         """
         Check if any memory in the self.memory list (if it is in this list, it is unlocked), for an available
@@ -33,7 +45,7 @@ class MemoryModule:
                 return module
         return False
 
-    def get_empty_available_memory(self):
+    def get_empty_available_memory(self, time):
         """
         Find a memory that has a slot available, and pull it from the available list. It will lock the memory into
         the locked memory dictionary. The module is now locked
@@ -43,7 +55,7 @@ class MemoryModule:
             if module.is_slot_available():
                 self.locked_memory[module] = {}
                 self.locked_memory[module]["time"] = self.clock.clock
-                self.locked_memory[module]["compute_time"] = module.LOAD_TIME
+                self.locked_memory[module]["compute_time"] = time
                 self.memory.remove(module)
                 return module
         return False
@@ -87,7 +99,8 @@ class MemoryModule:
         else:
             return True
 
-    def find_two_qubit_address(self):
+    def find_two_qubit_address(self,
+                               time):
         """
         Find and retrieve the location of two qubits. If two modules are available and have a qubit available,
         just return the two modules. Otherwise, get two qubits from one memory. This can be seen thgrough
@@ -115,11 +128,11 @@ class MemoryModule:
                 t = 1
             self.locked_memory[module] = {}
             self.locked_memory[module]["time"] = self.clock.clock
-            self.locked_memory[module]["compute_time"] = module.READ_TIME * t
+            self.locked_memory[module]["compute_time"] = time * t
             self.memory.remove(module)
         return modules
 
-    def is_same_fidelities(self):
+    def is_same_fidelities(self, error):
         """
         For successful distillation, we need to have two pairs at similar fidelities. Hence, we must check
         if we have two qubits at a similar fidelity. Currently, we do O(n^2) checks, but this can be improved
@@ -127,7 +140,6 @@ class MemoryModule:
         :return: If we have two at similar fidelity, return True, otherwise False
         """
         fids = {}
-        error = 0.005
         for module in self.memory:
             fids[module] = module.get_list_of_fidelities()
         for cell in fids.keys():
@@ -159,10 +171,12 @@ class MemoryModule:
 
     def get_fidelity_qubit(self,
                            fidelity,
+                           time,
                            error=0.005):
         """
         Retrieve qubit at fidelity. This will erase it from memory, and return the density
         matrix representing it.
+        :param time:
         :param error: Error tolerance for fidelity
         :param fidelity: Target fidelity within tolerance error.
         :return: Density matrix representing qubit. False if no qubit available that is at fidelity.
@@ -172,15 +186,15 @@ class MemoryModule:
             mem = module.get_list_of_fidelities()
             for i, (key, value) in enumerate(mem.items()):
                 if fidelity - value < error:
-                    dm = module.output_addressed(i)
+                    dm = module.output_addressed(i,time)
                     self.locked_memory[module] = {}
                     self.locked_memory[module]["time"] = self.clock.clock
-                    self.locked_memory[module]["compute_time"] = module.READ_TIME
+                    self.locked_memory[module]["compute_time"] = time
                     self.memory.remove(module)
                     return dm
         return False
 
-    def get_same_fidelities(self):
+    def get_same_fidelities(self, time, error):
         """
         For the distillation of a distilled pair, we want to make sure that we are distilling an appropriate
         pair. For that, we find the first pair of qubits that are at the same fidelity, and distill them
@@ -189,7 +203,6 @@ class MemoryModule:
         KEY. cell2 is MemoryCell2, and key2 is the key for the qubit in MemoryCell2.
         """
         fids = {}
-        error = 0.005
         for module in self.memory:
             fids[module] = module.get_list_of_fidelities()
         for cell in fids.keys():
@@ -199,6 +212,17 @@ class MemoryModule:
                         if key == key2 and cell == cell2:
                             continue
                         if np.abs(value - value2) < error:
+                            if cell == cell2:
+                                self.locked_memory[cell] = {}
+                                self.locked_memory[cell]["time"] = self.clock.clock
+                                self.locked_memory[cell]["compute_time"] = 2 * time
+                            else:
+                                self.locked_memory[cell] = {}
+                                self.locked_memory[cell]["time"] = self.clock.clock
+                                self.locked_memory[cell]["compute_time"] = time
+                                self.locked_memory[cell2] = {}
+                                self.locked_memory[cell2]["time"] = self.clock.clock
+                                self.locked_memory[cell2]["compute_time"] = time
                             return cell, key, cell2, key2
         return False
 
@@ -220,30 +244,19 @@ class MemoryModule:
             memory.ACTIVE.append(0)
         # ====================================
 
-    def input(self, dm):
+    def input(self, dm,
+              time):
         """
-        Input a density matrix to an available memory. Module will become locked for LOAD_TIME
+        Input a density matrix to an available memory. Module will become locked for respective time passed
+        :param time: Time to complete respective process.
         :param dm: Density matrix representing the qubit being loaded
         :return: None
         """
         module = self.find_empty_available_memory()
         self.locked_memory[module] = {}
         self.locked_memory[module]["time"] = self.clock.clock
-        self.locked_memory[module]["compute_time"] = module.LOAD_TIME
+        self.locked_memory[module]["compute_time"] = time
         self.memory.remove(module)
-        module.input(dm)
-
-    # def output(self):
-    #     def find_available_qubit(self, clock):
-    #         oldest_memory = None
-    #         oldest_qubit_index = None
-    #         oldest_qubit_time = 0
-    #         for module in self.memory:
-    #             if module.available and module.qb_in_memory():
-    #                 index, time = module.get_oldest_qubit(clock)
-    #                 if time > oldest_qubit_time:
-    #                     oldest_memory = module
-    #                     oldest_qubit_index = index
-    #                     oldest_qubit_time = time
-    #         if oldest_memory is not None:
-    #             return oldest_memory, oldest_qubit_index, oldest_qubit_time
+        # This has noise modelling in it. Do not need to do it here.
+        # Noise modelling should be kept at submodule level, as noise model is a function of hardware T1/T2 times.
+        module.input(dm, time)
