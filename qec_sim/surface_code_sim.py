@@ -1,6 +1,6 @@
 import numpy as np
 import stim
-import sinter
+#import sinter
 
 class DataQubit():
 
@@ -22,31 +22,60 @@ class MeasureQubit():
     def __repr__(self):
         return f'|{self.name}, Coords: {self.coords}, Basis: {self.basis}, Data Qubits: {self.data_qubits}|'
 
-#TODO: change all the noises
 class LogicalQubit():
     def __init__(self, d: int, gate2_err:float, params:dict) -> None:
         self.d = d
         
         self.gate2_err = gate2_err
-        #decide whether to add readout time and error
         self.err_multipler = gate2_err/params['data_ancilla_2q_err']
         self.readout_err = params['readout_err'] * self.err_multipler
         self.gate1_err_syn = params['ancilla_1q_err'] * self.err_multipler
-        #self.reset_err = params['reset_err'] * self.err_multipler
+        self.reset_err = params['reset_err'] * self.err_multipler
         self.data_T1 = params['data_T1']
         self.data_T2 = params['data_T2']
         self.ancilla_T1 = params['ancilla_T1']
         self.ancilla_T2 = params['ancilla_T2']
         self.time_measurement_ancilla = params['time_measurement_ancilla']
-        #self.time_reset_ancilla = params['time_reset_ancilla']
+        self.time_reset_ancilla = params['time_reset_ancilla']
         self.time_1q_ancilla = params['time_1q_ancilla']
         self.time_2q = params['time_2q']
 
+        px = (1.-np.exp(-1*self.time_1q_ancilla/self.ancilla_T1))/4
+        pz = (1.-np.exp(-1*self.time_1q_ancilla/self.ancilla_T2))/2 - px
+        #idle XYZ errors on syndrome qubits during a 1Q gate on a syndrome qubit
+        self.idle_noise_on_syn_1q = [px,px,pz]
+
+        px = (1.-np.exp(-1*self.time_1q_ancilla/self.data_T1))/4
+        pz = (1.-np.exp(-1*self.time_1q_ancilla/self.data_T2))/2 - px
+        #idle XYZ errors on data qubits during a 1Q gate on a syndrome qubit
+        self.idle_noise_on_data_1q = [px,px,pz]
+
+        px = (1.-np.exp(-1*self.time_2q/self.ancilla_T1))/4
+        pz = (1.-np.exp(-1*self.time_2q/self.ancilla_T2))/2 - px
+        #idle XYZ errors on syndrome qubits during a 2Q gate
+        self.idle_noise_on_syn_2q = [px,px,pz]
+
+        px = (1.-np.exp(-1*self.time_2q/self.data_T1))/4
+        pz = (1.-np.exp(-1*self.time_2q/self.data_T2))/2 - px
+        #idle XYZ errors on data qubits during a 2Q gate
+        self.idle_noise_on_data_2q = [px,px,pz]
+
+        px = (1.-np.exp(-1*self.time_reset_ancilla/self.data_T1))/4
+        pz = (1.-np.exp(-1*self.time_reset_ancilla/self.data_T2))/2 - px
+        #idle XYZ errors on data qubits during reset on the syndrome qubits
+        self.idle_noise_on_data_reset = [px,px,pz]
+
+        px = (1.-np.exp(-1*self.time_measurement_ancilla/self.data_T1))/4
+        pz = (1.-np.exp(-1*self.time_measurement_ancilla/self.data_T2))/2 - px
+        #idle XYZ errors on data qubits during measurement on the syndrome qubits
+        self.idle_noise_on_data_meas = [px,px,pz]
+
         self.data = [DataQubit((d*x + y), (2*x, 2*y)) for x in range(d) for y in range(d)]
         data_matching = [[None for _ in range(2*d)] for _ in range(2*d)]
+        
         for data_q in self.data:
             data_matching[data_q.coords[0]][data_q.coords[1]] = data_q
-        q = d*d
+        q = d*d # starting from qname=d**2 we have ancilla qubits
         self.x_ancilla = []
         self.z_ancilla = []
         for x in range(-1, d):
@@ -90,57 +119,34 @@ class LogicalQubit():
 
         self.meas_record = []
 
-    def apply_1gate(self, circ, gate, qubits):
+    def apply_1gate(self, circ, gate, qubits):#assuming that 1Q gates are only applied on X ancilla qubits
         circ.append(gate, qubits)
-        if self.faulty_qubits:
-            if self.faulty_factor > 1:
-                circ.append("DEPOLARIZE1", self.faulty_qubits, self.faulty_factor * self.gate1_err)
-            else:
-                circ.append("DEPOLARIZE1", self.faulty_qubits, self.faulty_factor * 0.75)
-        non_faulty_qs = [q for q in self.all_qubits if self.faulty_qubits is None or q not in self.faulty_qubits]
-        circ.append("DEPOLARIZE1", non_faulty_qs, self.gate1_err)
+        circ.append("DEPOLARIZE1", qubits, self.gate1_err_syn)
+        circ.append("PAULI_CHANNEL_1", [measure.name for measure in self.z_ancilla], self.idle_noise_on_syn_1q)
+        circ.append("PAULI_CHANNEL_1", [data.name for data in self.data], self.idle_noise_on_data_1q)
         circ.append("TICK")
 
     def apply_2gate(self, circ, gate, qubits):
         circ.append(gate, qubits)
-        faulty_qs = []
-        if self.faulty_qubits:
-            for i in range(len(qubits) // 2):
-                if qubits[2*i] in self.faulty_qubits or qubits[2*i+1] in self.faulty_qubits:
-                    faulty_qs += [qubits[2*i],qubits[2*i+1]]
-        non_faulty_qs = [q for q in qubits if q not in faulty_qs]
-        circ.append("DEPOLARIZE2", non_faulty_qs, self.gate2_err)
-        if len(faulty_qs) > 0:
-            if self.faulty_factor > 1:
-                circ.append("DEPOLARIZE2", faulty_qs, self.faulty_factor * self.gate2_err)
-            else:
-                circ.append("DEPOLARIZE2", faulty_qs, self.faulty_factor * 15./16.)
+        circ.append("DEPOLARIZE2", qubits, self.gate2_err)
 
         #apply 1Q depolarizing errors on idle qubits
         if len(qubits) < len(self.all_qubits):
-            idle_qubits = list(set(self.all_qubits) - set(qubits))
-            faulty_idle_qs = [q for q in idle_qubits if self.faulty_qubits and q in self.faulty_qubits]
-            non_faulty_idle_qs = [q for q in idle_qubits if self.faulty_qubits is None or q not in self.faulty_qubits]
-            circ.append("DEPOLARIZE1", non_faulty_idle_qs, self.gate1_err)
-            if len(faulty_idle_qs) > 0:
-                if self.faulty_factor > 1:
-                    circ.append("DEPOLARIZE1", faulty_idle_qs, self.faulty_factor * self.gate1_err)
-                else:
-                    circ.append("DEPOLARIZE1", faulty_idle_qs, self.faulty_factor * 0.75)
+            idle_data = list(set([data.name for data in self.data]) - set(qubits))
+            idle_syn = list(set([measure.name for measure in self.x_ancilla]+[measure.name for measure in self.z_ancilla]) - set(qubits))
+            circ.append("PAULI_CHANNEL_1", idle_data, self.idle_noise_on_data_2q)
+            circ.append("PAULI_CHANNEL_1", idle_syn, self.idle_noise_on_syn_2q)
         circ.append("TICK")
 
     def reset_meas_qubits(self, circ, op, qubits, last=False):
-        if op == "R":
+        if op == "R":#assume that R is either on all ancilla qubits or on all qubits
             circ.append(op, qubits)
-        faulty_qs = [q for q in qubits if self.faulty_qubits and q in self.faulty_qubits]
-        non_faulty_qs = [q for q in qubits if self.faulty_qubits is None or q not in self.faulty_qubits]
-        circ.append("X_ERROR", non_faulty_qs, self.readout_err)
-        if len(faulty_qs) > 0:
-            if self.faulty_factor > 1:
-                circ.append("X_ERROR", faulty_qs, self.faulty_factor * self.readout_err)
-            else:
-                circ.append("X_ERROR", faulty_qs, self.faulty_factor * 0.5)
-        if op == "M" or op == "MR":
+            if len(qubits) < len(self.all_qubits):#reset on all ancilla qubits
+                circ.append("X_ERROR", qubits, self.reset_err)
+                circ.append("PAULI_CHANNEL_1", [data.name for data in self.data], self.idle_noise_on_data_reset)
+        if op == "M":
+            if not last:
+                circ.append("X_ERROR", qubits, self.readout_err)
             circ.append(op, qubits)
             # Update measurement record indices
             meas_round = {}
@@ -151,16 +157,9 @@ class LogicalQubit():
                 for q, idx in round.items():
                     round[q] = idx - len(qubits)
             self.meas_record.append(meas_round)
-        if not last and len(qubits) < len(self.all_qubits):
-            idle_qubits = list(set(self.all_qubits) - set(qubits))
-            faulty_idle_qs = [q for q in idle_qubits if self.faulty_qubits and q in self.faulty_qubits]
-            non_faulty_idle_qs = [q for q in idle_qubits if self.faulty_qubits is None or q not in self.faulty_qubits]
-            circ.append("DEPOLARIZE1", non_faulty_idle_qs, self.gate1_err)
-            if len(faulty_idle_qs) > 0:
-                if self.faulty_factor > 1:
-                    circ.append("DEPOLARIZE1", faulty_idle_qs, self.faulty_factor * self.gate1_err)
-                else:
-                    circ.append("DEPOLARIZE1", faulty_idle_qs, self.faulty_factor * 0.75)
+            # add errors on idle qubits
+            if not last and len(qubits) < len(self.all_qubits):#assume data qubits are idle
+                circ.append("PAULI_CHANNEL_1", [data.name for data in self.data], self.idle_noise_on_data_meas)
 
 
     def get_meas_rec(self, round_idx, qubit_name):
